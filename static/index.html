@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Token Usage Dashboard</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="app-header">
+      <div class="masthead">
+        <h1>Token Usage Dashboard</h1>
+        <p id="metaLine">Aggregated from local Claude Code &amp; Codex logs</p>
+      </div>
+    </header>
+
+    <main>
+      <section class="filters-band" aria-label="Filters">
+        <div class="filters">
+          <label>
+            Tool
+            <select id="toolSelect">
+              <option value="all">All</option>
+              <option value="claude">Claude Code</option>
+              <option value="codex">Codex</option>
+            </select>
+          </label>
+          <label>
+            From
+            <input id="fromDate" type="date">
+          </label>
+          <label>
+            To
+            <input id="toDate" type="date">
+          </label>
+          <label>
+            Project
+            <select id="projectSelect">
+              <option value="all">All</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="summary-band" aria-label="Summary">
+        <article class="metric">
+          <span>Total Tokens</span>
+          <strong id="totalTokens">-</strong>
+        </article>
+        <article class="metric">
+          <span>Requests</span>
+          <strong id="requests">-</strong>
+        </article>
+        <article class="metric">
+          <span>Input</span>
+          <strong id="inputTokens">-</strong>
+        </article>
+        <article class="metric">
+          <span>Output</span>
+          <strong id="outputTokens">-</strong>
+        </article>
+        <article class="metric">
+          <span>Cache Hit</span>
+          <strong id="cachedTokens">-</strong>
+        </article>
+        <article class="metric">
+          <span>Reasoning</span>
+          <strong id="reasoningTokens">-</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Daily Usage</h2>
+          <div id="status" role="status" aria-live="polite">Ready</div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Project</th>
+                <th>Date</th>
+                <th class="num">Requests</th>
+                <th class="num">Input</th>
+                <th class="num">Output</th>
+                <th class="num">Cache Create</th>
+                <th class="num">Cache Read</th>
+                <th class="num">Cache Hit</th>
+                <th class="num">Reasoning</th>
+                <th class="num">Total</th>
+              </tr>
+            </thead>
+            <tbody id="usageBody"></tbody>
+          </table>
+        </div>
+
+        <div id="emptyState" class="empty" hidden>No records found</div>
+
+        <div class="pagination" aria-label="Pagination">
+          <div class="pagination-left">
+            <label>
+              Per page
+              <select id="pageSize">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+              </select>
+            </label>
+          </div>
+          <div class="pagination-center">
+            <button id="prevPage" type="button">Previous</button>
+            <span id="pageStatus">Page 1</span>
+            <button id="nextPage" type="button">Next</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

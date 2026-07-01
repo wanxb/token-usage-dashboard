@@ -1,0 +1,15 @@
+﻿services:
+  token-usage-dashboard:
+    build: .
+    container_name: token-usage-dashboard
+    ports:
+      - "8765:8765"
+    environment:
+      TOKEN_USAGE_TZ: Asia/Shanghai
+      TOKEN_USAGE_CLAUDE_PROJECTS: /host/claude/projects
+      TOKEN_USAGE_CODEX_SESSIONS: /host/codex/sessions
+      TOKEN_USAGE_CODEX_DB: /host/codex/logs_2.sqlite
+    volumes:
+      - C:\Users\Administrator\.claude:/host/claude:ro
+      - C:\Users\Administrator\.codex:/host/codex:ro
+    restart: unless-stopped
