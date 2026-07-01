@@ -394,3 +394,138 @@ tbody tr:hover {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Date picker ──────────────────────────────────── */
+
+.date-picker-wrap {
+  position: relative;
+  display: block;
+}
+
+.date-picker-wrap input {
+  cursor: pointer;
+  caret-color: transparent;
+}
+
+.date-picker-popup {
+  position: fixed;
+  z-index: 1000;
+  width: 280px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 12px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  user-select: none;
+}
+
+.dp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.dp-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--near-black);
+}
+
+.dp-nav {
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  min-height: unset;
+  box-shadow: none;
+  color: var(--olive);
+}
+
+.dp-nav:hover {
+  border-color: var(--border);
+  background: var(--ivory);
+  color: var(--near-black);
+}
+
+/* Clear button (×) inside popup */
+.dp-clear {
+  display: block;
+  width: 100%;
+  padding: 6px 0 2px;
+  border: none;
+  border-top: 1px solid var(--border-soft);
+  background: none;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--stone);
+  font-family: inherit;
+  min-height: unset;
+  box-shadow: none;
+  border-radius: 0;
+  text-align: center;
+}
+.dp-clear:hover {
+  color: var(--near-black);
+}
+
+.dp-weekdays,
+.dp-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+}
+
+.dp-weekday {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--stone);
+  padding: 4px 0;
+  text-transform: uppercase;
+}
+
+.dp-day {
+  font-size: 13px;
+  padding: 6px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--near-black);
+  transition: background 80ms ease;
+}
+
+.dp-day:hover {
+  background: rgba(27, 54, 93, 0.07);
+}
+
+.dp-day.dp-other {
+  color: #ccc;
+}
+
+.dp-day.dp-today {
+  font-weight: 700;
+  color: var(--brand);
+}
+
+.dp-day.dp-selected {
+  background: var(--brand);
+  color: #fff;
+  font-weight: 600;
+}
+
+.dp-day.dp-selected:hover {
+  background: var(--brand-light);
+}
+
+.dp-day.dp-disabled {
+  color: #ccc;
+  cursor: default;
+}

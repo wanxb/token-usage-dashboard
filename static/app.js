@@ -8,6 +8,9 @@ const controls = {
   nextPage: document.querySelector("#nextPage"),
 };
 
+initDatePicker(controls.from);
+initDatePicker(controls.to);
+
 const els = {
   body: document.querySelector("#usageBody"),
   status: document.querySelector("#status"),
@@ -139,6 +142,190 @@ function renderTable() {
     : "No records";
   controls.prevPage.disabled = currentPage <= 1 || totalRows === 0;
   controls.nextPage.disabled = currentPage >= totalPages || totalRows === 0;
+}
+
+/* ── Date picker ───────────────────────────────────── */
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const WEEKDAYS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+function initDatePicker(input) {
+  let popup = null;
+  let viewYear, viewMonth; // the calendar view (year/month being displayed)
+  let closeTimer = null;
+
+  function parseValue() {
+    const v = input.value;
+    if (!v) return new Date();
+    const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+    return new Date();
+  }
+
+  function build() {
+    const d = parseValue();
+    viewYear = d.getFullYear();
+    viewMonth = d.getMonth();
+
+    popup = document.createElement("div");
+    popup.className = "date-picker-popup";
+    popup.addEventListener("mousedown", (e) => e.preventDefault()); // prevent input blur
+
+    render();
+    document.body.appendChild(popup);
+    position();
+  }
+
+  function render() {
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const daysInPrev = new Date(viewYear, viewMonth, 0).getDate();
+
+    const today = new Date();
+    const todayStr = fmtDate(today);
+    const selStr = input.value;
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "dp-header";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.className = "dp-nav";
+    prevBtn.textContent = "‹";
+    prevBtn.setAttribute("aria-label", "Previous month");
+
+    const title = document.createElement("span");
+    title.className = "dp-title";
+    title.textContent = MONTHS[viewMonth] + " " + viewYear;
+
+    const nextBtn = document.createElement("button");
+    nextBtn.className = "dp-nav";
+    nextBtn.textContent = "›";
+    nextBtn.setAttribute("aria-label", "Next month");
+
+    header.append(prevBtn, title, nextBtn);
+
+    popup.innerHTML = "";
+    popup.appendChild(header);
+
+    // Weekday row
+    const wdRow = document.createElement("div");
+    wdRow.className = "dp-weekdays";
+    for (const wd of WEEKDAYS) {
+      const el = document.createElement("span");
+      el.className = "dp-weekday";
+      el.textContent = wd;
+      wdRow.appendChild(el);
+    }
+    popup.appendChild(wdRow);
+
+    // Day grid
+    const grid = document.createElement("div");
+    grid.className = "dp-days";
+
+    // Previous month's trailing days
+    const padStart = firstDay;
+    for (let i = padStart - 1; i >= 0; i--) {
+      const day = daysInPrev - i;
+      const el = document.createElement("span");
+      el.className = "dp-day dp-other";
+      el.textContent = day;
+      grid.appendChild(el);
+    }
+
+    // Current month days
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = fmtDate(new Date(viewYear, viewMonth, d));
+      const el = document.createElement("span");
+      el.className = "dp-day";
+      if (dateStr === todayStr) el.classList.add("dp-today");
+      if (dateStr === selStr) el.classList.add("dp-selected");
+      el.textContent = d;
+      el.dataset.date = dateStr;
+      el.addEventListener("click", () => select(dateStr));
+      grid.appendChild(el);
+    }
+
+    // Next month's leading days (to fill 42 cells = 6 rows)
+    const totalCells = padStart + daysInMonth;
+    const remaining = 42 - totalCells;
+    for (let d = 1; d <= remaining; d++) {
+      const el = document.createElement("span");
+      el.className = "dp-day dp-other";
+      el.textContent = d;
+      grid.appendChild(el);
+    }
+
+    popup.appendChild(grid);
+
+    // Footer with clear button
+    const footer = document.createElement("div");
+    footer.className = "dp-footer";
+    const clearBtn = document.createElement("button");
+    clearBtn.textContent = "Clear";
+    clearBtn.className = "dp-clear";
+    clearBtn.addEventListener("click", (e) => { e.stopPropagation(); clear(); render(); });
+    footer.appendChild(clearBtn);
+    popup.appendChild(footer);
+
+    // Nav handlers (rebound after innerHTML wipe)
+    prevBtn.addEventListener("click", () => { viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; } render(); });
+    nextBtn.addEventListener("click", () => { viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; } render(); });
+  }
+
+  function position() {
+    const rect = input.getBoundingClientRect();
+    popup.style.left = rect.left + "px";
+    popup.style.top = (rect.bottom + 4) + "px";
+    // Keep within viewport
+    const pw = popup.offsetWidth;
+    if (rect.left + pw > window.innerWidth) {
+      popup.style.left = (window.innerWidth - pw - 8) + "px";
+    }
+  }
+
+  function clear() {
+    input.value = "";
+    close();
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function select(dateStr) {
+    input.value = dateStr;
+    close();
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function open() {
+    if (popup) close();
+    build();
+  }
+
+  function close() {
+    if (popup) { popup.remove(); popup = null; }
+  }
+
+  input.addEventListener("focus", () => {
+    if (closeTimer) clearTimeout(closeTimer);
+    open();
+  });
+
+  input.addEventListener("blur", () => {
+    closeTimer = setTimeout(() => {
+      if (!popup || !popup.matches(":hover")) close();
+    }, 180);
+  });
+
+  // Close on scroll / resize (reposition wouldn't work well)
+  window.addEventListener("scroll", () => { if (popup) close(); }, true);
+  window.addEventListener("resize", () => { if (popup) close(); });
+}
+
+function fmtDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return y + "-" + m + "-" + day;
 }
 
 function setDefaultDates() {
