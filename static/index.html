@@ -75,6 +75,40 @@
         </article>
       </section>
 
+      <section class="panel heatmap-panel" aria-label="Usage heatmap">
+        <div class="panel-head">
+          <h2>Usage Heatmap</h2>
+          <div class="heatmap-controls">
+            <div class="heatmap-legend" role="img" aria-label="Color legend: Less to More">
+              <span class="legend-label">Less</span>
+              <span class="legend-cell level-0"></span>
+              <span class="legend-cell level-1"></span>
+              <span class="legend-cell level-2"></span>
+              <span class="legend-cell level-3"></span>
+              <span class="legend-cell level-4"></span>
+              <span class="legend-label">More</span>
+            </div>
+          </div>
+        </div>
+        <div class="heatmap-body">
+          <div id="heatmapLoading" class="heatmap-placeholder">Loading heatmap…</div>
+          <div id="heatmapEmpty" class="heatmap-placeholder" hidden>No usage data for the selected period</div>
+          <div id="heatmapContent" class="heatmap-content" hidden>
+            <div class="heatmap-scroll">
+              <div class="heatmap-months" id="heatmapMonths"></div>
+              <div class="heatmap-grid-row">
+                <div class="heatmap-y-labels">
+                  <span></span><span>Mon</span><span></span>
+                  <span>Wed</span><span></span><span>Fri</span><span></span>
+                </div>
+                <div class="heatmap-cols" id="heatmapCols" role="grid" aria-label="Daily token usage by week"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="heatmapTooltip" class="heatmap-tooltip" role="tooltip" hidden></div>
+      </section>
+
       <section class="panel">
         <div class="panel-head">
           <h2>Daily Usage</h2>

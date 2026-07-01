@@ -12,6 +12,14 @@
   --border-soft: #e5e3d8;
   --shadow: 0 10px 26px rgba(27, 54, 93, 0.06);
   --shadow-soft: 0 1px 0 rgba(27, 54, 93, 0.05);
+
+  /* Heatmap */
+  --heatmap-1: #9be9a8;
+  --heatmap-2: #40c463;
+  --heatmap-3: #30a14e;
+  --heatmap-4: #216e39;
+  --heatmap-cell-size: 18px;
+  --heatmap-cell-gap: 3px;
 }
 
 * {
@@ -529,3 +537,209 @@ tbody tr:hover {
   color: #ccc;
   cursor: default;
 }
+
+/* ── Heatmap ─────────────────────────────────────────── */
+
+.heatmap-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.heatmap-metric-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--stone);
+  font: 600 12px/1.2 "Segoe UI", Arial, sans-serif;
+}
+
+.heatmap-metric-label select {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 8px;
+  background: #fff;
+  color: var(--near-black);
+  font: 400 13px "Segoe UI", Arial, sans-serif;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.heatmap-legend .legend-label {
+  font-size: 10px;
+  color: var(--stone);
+  margin: 0 3px;
+}
+
+.legend-cell {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+}
+
+.legend-cell.level-0 {
+  background: #ebedf0;
+  border: 0;
+}
+
+.legend-cell.level-1 { background: var(--heatmap-1); }
+.legend-cell.level-2 { background: var(--heatmap-2); }
+.legend-cell.level-3 { background: var(--heatmap-3); }
+.legend-cell.level-4 { background: var(--heatmap-4); }
+
+/* Body */
+
+.heatmap-body {
+  padding: 12px 18px 18px;
+}
+
+.heatmap-placeholder {
+  padding: 32px 18px;
+  color: var(--olive);
+  text-align: center;
+  font-size: 14px;
+}
+
+/* Scroll wrapper */
+
+.heatmap-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Month labels row */
+
+.heatmap-months {
+  display: flex;
+  margin-left: 32px;
+  margin-bottom: 2px;
+  height: 16px;
+  position: relative;
+}
+
+.heatmap-month-label {
+  position: absolute;
+  font-size: 10px;
+  color: var(--stone);
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Grid row with Y labels */
+
+.heatmap-grid-row {
+  display: flex;
+}
+
+.heatmap-y-labels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--heatmap-cell-gap);
+  margin-right: 4px;
+  padding-top: 0;
+}
+
+.heatmap-y-labels span {
+  height: var(--heatmap-cell-size);
+  line-height: var(--heatmap-cell-size);
+  font-size: 10px;
+  color: var(--stone);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Columns */
+
+.heatmap-cols {
+  display: flex;
+  gap: var(--heatmap-cell-gap);
+}
+
+.heatmap-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--heatmap-cell-gap);
+}
+
+/* Cells */
+
+.heatmap-cell {
+  width: var(--heatmap-cell-size);
+  height: var(--heatmap-cell-size);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: outline 100ms ease, opacity 100ms ease;
+  position: relative;
+}
+
+.heatmap-cell:focus-visible {
+  outline: 2px solid var(--brand-light);
+  outline-offset: 1px;
+}
+
+.heatmap-cell:hover {
+  opacity: 0.7;
+}
+
+.heatmap-cell.level-0 {
+  background: #ebedf0;
+  border: 0;
+}
+
+.heatmap-cell-future {
+  background: transparent;
+  border: 0;
+  pointer-events: none;
+}
+
+.heatmap-cell.level-1 { background: var(--heatmap-1); }
+.heatmap-cell.level-2 { background: var(--heatmap-2); }
+.heatmap-cell.level-3 { background: var(--heatmap-3); }
+.heatmap-cell.level-4 { background: var(--heatmap-4); }
+
+.heatmap-cell.selected {
+  outline: 2px solid var(--brand);
+  outline-offset: 0;
+}
+
+.heatmap-cell.selected.level-0 {
+  outline: 2px solid var(--brand-light);
+  background: #ebedf0;
+}
+
+/* Tooltip */
+
+.heatmap-tooltip {
+  position: fixed;
+  z-index: 2000;
+  padding: 6px 10px;
+  background: var(--near-black);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive */
+
+@media (max-width: 720px) {
+  .heatmap-controls {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .heatmap-y-labels span {
+    font-size: 9px;
+  }

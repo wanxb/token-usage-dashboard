@@ -6,7 +6,7 @@ import sys
 import time as _time
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from typing import Callable, Iterable, TypeVar
 from zoneinfo import ZoneInfo
 
@@ -99,38 +99,121 @@ def usage_total(values: dict[str, int]) -> int:
     )
 
 
-def resolve_claude_project(path: Path) -> str:
-    """Return the outermost project folder name for a Claude JSONL file.
+# ── Project name resolution ──────────────────────────────────────────────
 
-    Scans the file for all unique ``cwd`` entries and picks the one with the
-    fewest path components — that is the project root.
+_folder_display_cache: dict[str, str] = {}
+
+
+def _build_project_cache(projects_dir: Path) -> None:
+    """Pre-scan every top-level folder under *projects_dir*.
+
+    1) Read a few JSONL files from each folder, collect all cwds, and pick
+       the shortest one (fewest backslashes) — that is the folder's
+       *root path* (e.g. ``E:\\Projects\\AI_Agent``).
+    2) Build a set of all root paths.
+    3) For each folder, walk UP from its root path: if the immediate parent
+       appears in the set of known roots, this folder is a sub-project of
+       that parent.  Assign the parent's display name.
+       Otherwise the folder *is* its own canonical project.
     """
-    best: str = path.parent.name  # fallback: encoded dir name
-    try:
-        lines = path.open("r", encoding="utf-8", errors="replace")
-    except OSError:
-        return best
+    global _folder_display_cache
+    if _folder_display_cache:  # already built
+        return
 
-    cwds: set[str] = set()
-    with lines:
-        for line in lines:
-            if '"cwd"' not in line:
-                continue
+    # ---- step 1: folder → root path --------------------------------------
+    folder_roots: dict[str, str] = {}   # folder name → full root cwd string
+    for entry in sorted(projects_dir.iterdir()):
+        if not entry.is_dir():
+            continue
+        folder = entry.name
+        all_cwds: set[str] = set()
+        # Only scan top-level jsonl files (ignore subdirs like subagents/)
+        for child in sorted(p for p in entry.iterdir() if p.is_file() and p.suffix == ".jsonl"):
+            if len(all_cwds) >= 8:
+                break
             try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
+                fh = child.open("r", encoding="utf-8", errors="replace")
+            except OSError:
                 continue
-            cwd = obj.get("cwd")
-            if isinstance(cwd, str):
-                cwds.add(cwd)
+            with fh:
+                for line in fh:
+                    if '"cwd"' not in line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    cwd = obj.get("cwd")
+                    if isinstance(cwd, str):
+                        cwds = set(cwd)  # store full cwd path
+                        all_cwds.add(cwd)
+                    if len(all_cwds) >= 16:
+                        break
 
-    if cwds:
-        # Shortest path = outermost folder
-        shortest = min(cwds, key=lambda p: p.count("\\"))
-        name = PureWindowsPath(shortest.rstrip("\\")).name
-        if name:
-            best = name
-    return best
+        if all_cwds:
+            root = min(all_cwds, key=lambda p: p.count("\\"))
+        else:
+            root = None
+
+        folder_roots[folder] = root
+
+    # ---- step 2: set of known root cwds ---------------------------------
+    all_roots: set[str] = {r for r in folder_roots.values() if r is not None}
+
+    # ---- step 3: canonical project for each folder -----------------------
+    for folder, root in folder_roots.items():
+        if root is None:
+            _folder_display_cache[folder] = _decode_folder_name(folder)
+            continue
+
+        # Walk up: is the parent directory a known project root?
+        parent = root.rstrip("\\").rsplit("\\", 1)[0]
+        if parent in all_roots:
+            # This folder is a sub-project; use parent's display name
+            parent_name = parent.rstrip("\\").rsplit("\\", 1)[-1]
+            _folder_display_cache[folder] = parent_name
+        else:
+            parts = root.rstrip("\\").rsplit("\\", 1)
+            _folder_display_cache[folder] = parts[-1] if parts else _decode_folder_name(folder)
+
+
+def resolve_claude_project(path: Path, projects_dir: Path) -> str:
+    """Return the canonical project name for a JSONL file."""
+    _build_project_cache(projects_dir)
+
+    try:
+        rel = path.relative_to(projects_dir)
+        folder = rel.parts[0]
+    except ValueError:
+        folder = path.parent.name
+
+    return _folder_display_cache.get(folder, _decode_folder_name(folder))
+
+
+def _decode_folder_name(folder: str) -> str:
+    """Decode an encoded folder name to a human-readable project name.
+
+      E--Projects-<name>           → <name>
+      C--Users-<user>-Desktop-<n>  → <name>
+      C--Users-<user>              → Ad-hoc
+    """
+    parts = folder.split("--", 1)
+    if len(parts) < 2:
+        return folder
+    rest = parts[1]
+
+    for prefix in ("Projects-",):
+        if rest.startswith(prefix):
+            return rest[len(prefix) :]
+
+    if rest.startswith("Users-"):
+        segments = rest.split("-")
+        if "Desktop" in segments:
+            idx = segments.index("Desktop")
+            return "-".join(segments[idx + 1 :])
+        return "Ad-hoc"
+
+    return rest
 
 
 def iter_claude_events(projects_dir: Path, tz: ZoneInfo) -> Iterable[UsageEvent]:
@@ -139,7 +222,7 @@ def iter_claude_events(projects_dir: Path, tz: ZoneInfo) -> Iterable[UsageEvent]
 
     seen_message_ids: set[str] = set()
     for path in projects_dir.rglob("*.jsonl"):
-        project_name = resolve_claude_project(path)
+        project_name = resolve_claude_project(path, projects_dir)
         try:
             lines = path.open("r", encoding="utf-8", errors="replace")
         except OSError as exc:

@@ -28,6 +28,7 @@ const els = {
 
 let allRows = [];
 let currentPage = 1;
+let selectedHeatmapDate = null;
 let pageSize = Number(controls.pageSize.value || 10);
 const numberFormat = new Intl.NumberFormat("en-US");
 
@@ -54,7 +55,8 @@ function compareRows(a, b) {
 
 function visibleRows() {
   const rows = allRows
-    .filter((row) => row.period_type === "daily")
+    .filter((row) => row.period_type === "daily"
+      && (!selectedHeatmapDate || row.period === selectedHeatmapDate))
     .slice()
     .sort(compareRows);
 
@@ -80,10 +82,13 @@ async function loadData() {
     populateProjects(payload.meta?.projects || [], prevProject);
     renderSummary(payload);
     renderTable();
+    renderHeatmap();
     setStatus(`Updated ${payload.meta.generated_at}`);
   } catch (err) {
     allRows = [];
+    selectedHeatmapDate = null;
     renderTable();
+    renderHeatmap();
     setStatus(err.message || "Failed to load");
   }
 }
@@ -143,6 +148,200 @@ function renderTable() {
   controls.prevPage.disabled = currentPage <= 1 || totalRows === 0;
   controls.nextPage.disabled = currentPage >= totalPages || totalRows === 0;
 }
+
+/* ── Heatmap ──────────────────────────────────────────── */
+
+function computeHeatmapLevels(values) {
+  const sorted = values.filter(v => v > 0).sort((a, b) => a - b);
+  if (sorted.length === 0) return () => 0;
+
+  const len = sorted.length;
+  const q1 = sorted[Math.min(Math.floor(len * 0.25), len - 1)];
+  const q2 = sorted[Math.min(Math.floor(len * 0.50), len - 1)];
+  const q3 = sorted[Math.min(Math.floor(len * 0.75), len - 1)];
+
+  return (value) => {
+    if (value <= 0) return 0;
+    if (value <= q1) return 1;
+    if (value <= q2) return 2;
+    if (value <= q3) return 3;
+    return 4;
+  };
+}
+
+function renderHeatmap() {
+  const loadingEl = document.getElementById("heatmapLoading");
+  const emptyEl = document.getElementById("heatmapEmpty");
+  const contentEl = document.getElementById("heatmapContent");
+  const monthsEl = document.getElementById("heatmapMonths");
+  const colsEl = document.getElementById("heatmapCols");
+
+  if (!loadingEl || !contentEl) return;
+
+  const metric = "total_tokens";
+  const dailyRows = allRows.filter(r => r.period_type === "daily");
+
+  // Build metric map
+  const dataByDate = new Map();
+  for (const row of dailyRows) {
+    const val = Number(row[metric] || 0);
+    const key = row.period;
+    dataByDate.set(key, (dataByDate.get(key) || 0) + val);
+  }
+
+  // Always show the grid (even if no data — all cells level-0)
+  loadingEl.hidden = true;
+  emptyEl.hidden = true;
+  contentEl.hidden = false;
+
+  // Quantile thresholds from data
+  const getLevel = computeHeatmapLevels([...dataByDate.values()]);
+
+  // ── Date grid: 53 columns, last cell = today ──────────
+  const today = new Date();
+  // Start from ~53 weeks before today, snapped to Sunday
+  const start = new Date(today);
+  start.setDate(start.getDate() - 52 * 7 - start.getDay()); // Sunday of 53 weeks ago
+  const cursor = new Date(start);
+
+  // Build 53 weeks of grid data
+  const weeks = [];
+  const monthLabels = [];
+  const seenMonths = new Set();
+
+  for (let wi = 0; wi < 53; wi++) {
+    const cells = [];
+    for (let dow = 0; dow < 7; dow++) {
+      const dateStr = fmtDate(cursor);
+      const isFuture = dateStr > fmtDate(today);
+      const value = isFuture ? 0 : (dataByDate.get(dateStr) || 0);
+      const level = isFuture ? 0 : getLevel(value);
+      cells.push({ date: dateStr, value, level, isFuture });
+
+      // Month label: at the column containing the 1st of the month
+      if (cursor.getDate() === 1 && !seenMonths.has(cursor.getMonth())) {
+        seenMonths.add(cursor.getMonth());
+        monthLabels.push({ col: wi, name: MONTHS[cursor.getMonth()].slice(0, 3) });
+      }
+
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push(cells);
+  }
+
+  // ── Fluid cell size ──────────────────────────────────
+  const gridRow = colsEl.closest(".heatmap-grid-row");
+  const available = gridRow ? gridRow.clientWidth - 36 - 4 : 600; // minus y-labels area + buffer
+  const gap = 3;
+  const cellSize = Math.max(10, Math.floor((available - 52 * gap) / 53));
+  const step = cellSize + gap;
+
+  // Set dynamic CSS variable on common ancestor so y-labels + cells both inherit
+  contentEl.style.setProperty("--heatmap-cell-size", cellSize + "px");
+  contentEl.style.setProperty("--heatmap-cell-gap", gap + "px");
+
+  // Render month labels
+  monthsEl.innerHTML = "";
+  for (const ml of monthLabels) {
+    const span = document.createElement("span");
+    span.className = "heatmap-month-label";
+    span.textContent = ml.name;
+    span.style.left = (ml.col * step) + "px";
+    monthsEl.appendChild(span);
+  }
+
+  // Render columns
+  colsEl.innerHTML = "";
+  for (let wi = 0; wi < weeks.length; wi++) {
+    const col = document.createElement("div");
+    col.className = "heatmap-col";
+    for (const cell of weeks[wi]) {
+      const el = document.createElement("div");
+      el.className = "heatmap-cell" + (cell.isFuture ? " heatmap-cell-future" : " level-" + cell.level);
+      el.dataset.date = cell.date;
+      el.dataset.value = String(cell.value);
+      el.tabIndex = 0;
+      el.setAttribute("role", "gridcell");
+      el.setAttribute("aria-label", cell.date + ": " + fmt(cell.value) + " total");
+      if (selectedHeatmapDate === cell.date) el.classList.add("selected");
+      col.appendChild(el);
+    }
+    colsEl.appendChild(col);
+  }
+}
+
+function parseLocalDate(str) {
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(+m[1], +m[2] - 1, +m[3]);
+}
+
+/* ── Heatmap tooltip ─────────────────────────────────── */
+
+function showHeatmapTooltip(date, value) {
+  const tip = document.getElementById("heatmapTooltip");
+  if (!tip) return;
+  tip.textContent = date + ": " + fmt(Number(value)) + " Total";
+  tip.hidden = false;
+}
+
+function positionHeatmapTooltip(e) {
+  const tip = document.getElementById("heatmapTooltip");
+  if (!tip || tip.hidden) return;
+  const x = Math.min(e.clientX + 12, window.innerWidth - tip.offsetWidth - 8);
+  const y = e.clientY + 12;
+  tip.style.left = Math.max(4, x) + "px";
+  tip.style.top = y + "px";
+}
+
+function hideHeatmapTooltip() {
+  const tip = document.getElementById("heatmapTooltip");
+  if (tip) tip.hidden = true;
+}
+
+/* ── Heatmap event delegation ────────────────────────── */
+
+(function attachHeatmapEvents() {
+  const cols = document.getElementById("heatmapCols");
+  if (!cols) return;
+
+  cols.addEventListener("mouseover", (e) => {
+    const cell = e.target.closest(".heatmap-cell");
+    if (!cell) { hideHeatmapTooltip(); return; }
+    showHeatmapTooltip(cell.dataset.date, cell.dataset.value);
+  });
+
+  cols.addEventListener("mousemove", positionHeatmapTooltip);
+
+  cols.addEventListener("mouseout", (e) => {
+    if (e.target.closest(".heatmap-cell")) hideHeatmapTooltip();
+  });
+
+  cols.addEventListener("click", (e) => {
+    const cell = e.target.closest(".heatmap-cell");
+    if (!cell) return;
+    const date = cell.dataset.date;
+    if (selectedHeatmapDate === date) {
+      selectedHeatmapDate = null;
+    } else {
+      selectedHeatmapDate = date;
+    }
+    document.querySelectorAll(".heatmap-cell.selected").forEach(el => el.classList.remove("selected"));
+    if (selectedHeatmapDate) {
+      document.querySelectorAll('.heatmap-cell[data-date="' + selectedHeatmapDate + '"]')
+        .forEach(el => el.classList.add("selected"));
+    }
+    currentPage = 1;
+    renderTable();
+  });
+
+  cols.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.closest(".heatmap-cell")) {
+      e.preventDefault();
+      e.target.click();
+    }
+  });
+})();
 
 /* ── Date picker ───────────────────────────────────── */
 
@@ -338,6 +537,7 @@ function setDefaultDates() {
 
 function resetAndLoad() {
   currentPage = 1;
+  selectedHeatmapDate = null;
   loadData();
 }
 
@@ -351,6 +551,7 @@ controls.pageSize.addEventListener("change", () => {
   currentPage = 1;
   renderTable();
 });
+
 
 controls.prevPage.addEventListener("click", () => {
   if (currentPage > 1) {
@@ -369,3 +570,10 @@ controls.nextPage.addEventListener("click", () => {
 
 setDefaultDates();
 loadData();
+
+// Reflow heatmap on resize
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(renderHeatmap, 200);
+});
