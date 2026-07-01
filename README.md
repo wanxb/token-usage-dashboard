@@ -1,6 +1,6 @@
 # Token Usage Dashboard
 
-A local web dashboard for tracking Claude Code and Codex token usage by parsing log files from the local filesystem.
+A local web dashboard for tracking Claude Code, Codex, GitHub Copilot, and OpenCode token usage by parsing log files from the local filesystem.
 
 ![Dashboard Screenshot](assets/screenshot.png)
 
@@ -14,10 +14,11 @@ Open [http://localhost:8765](http://localhost:8765)
 
 ## Features
 
-- **Multi-source aggregation** — parses Claude Code JSONL logs, Codex session JSONL logs, and Codex SQLite database
-- **Project-level breakdown** — automatically groups Claude Code usage by project folder name
+- **Multi-source aggregation** — parses Claude Code JSONL logs, Codex session JSONL logs, Codex SQLite database, GitHub Copilot chat logs, and OpenCode SQLite database
+- **Project-level breakdown** — automatically groups Claude Code and Copilot usage by project folder name
 - **Date range filtering** — filter by start/end date
-- **Tool filtering** — view Claude Code, Codex, or combined
+- **Tool filtering** — view Claude Code, Codex, Copilot, OpenCode, or combined
+- **Usage heatmap** — GitHub-style contribution grid for daily total tokens
 - **Paginated table** — configurable page size with Previous/Next navigation
 - **CSV export** — download filtered data via `/api/export.csv`
 - **In-memory caching** — 60-second cache avoids re-parsing log files on repeated requests
@@ -44,20 +45,23 @@ Open [http://localhost:8765](http://localhost:8765)
 ### Backend (stdlib only, zero dependencies)
 
 - `ThreadingHTTPServer` serves static files and three API endpoints:
-  - `GET /api/usage?tool=&from=&to=&project=` — aggregated usage as JSON
+  - `GET /api/usage?tool=&from=&to=&project=&refresh=` — aggregated usage as JSON
   - `GET /api/export.csv` — same data as CSV download
   - `GET /api/projects` — available Claude Code project directories
-- Three generator functions parse log sources into `UsageEvent` dataclasses:
+- Generator functions parse log sources into `UsageEvent` dataclasses:
   - **Claude JSONL** — reads `~/.claude/projects/**/*.jsonl`, deduplicates by message ID, resolves project name from `cwd` field
   - **Codex sessions** — reads `~/.codex/sessions/*.jsonl`, deduplicates by total-token tuple
   - **Codex SQLite** — reads `~/.codex/logs_2.sqlite`, queries `response.completed` events, deduplicates by response ID
+  - **GitHub Copilot** — reads `%TEMP%/VSGitHubCopilotLogs/*.chat.log`, extracts `EventType(11)` JSON with input/output/cached/reasoning token counts and model name
+  - **OpenCode** — reads `~/.local/share/opencode/opencode.db`, parses `part` table `step-finish` records and `message` table token data with per-step granularity
 - `summarize()` aggregates events across 5 period types (daily, weekly, monthly, yearly, total)
 - In-process memory cache (60s TTL) avoids re-parsing log files
 
 ### Frontend (vanilla, no build step)
 
-- Filter bar with Tool, From/To dates, and Project dropdown
+- Filter bar with Tool, From/To dates, and Project dropdown (located in page header)
 - 6-metric summary bar (Total Tokens, Requests, Input, Output, Cache Hit, Reasoning)
+- GitHub-style usage heatmap with quantile-based color levels and tooltip
 - Paginated daily usage table sorted by date descending
 - Three visual states: loading, data, empty/error
 - Responsive layout with breakpoints at 1100px and 720px
@@ -74,6 +78,8 @@ Open [http://localhost:8765](http://localhost:8765)
 | `TOKEN_USAGE_CLAUDE_PROJECTS` | `~/.claude/projects` | Claude JSONL log directory |
 | `TOKEN_USAGE_CODEX_SESSIONS` | `~/.codex/sessions` | Codex session directory |
 | `TOKEN_USAGE_CODEX_DB` | `~/.codex/logs_2.sqlite` | Codex SQLite database |
+| `TOKEN_USAGE_COPILOT_LOGS` | `%TEMP%\VSGitHubCopilotLogs` | GitHub Copilot chat log directory |
+| `TOKEN_USAGE_OPENCODE_DB` | `~/.local/share/opencode/opencode.db` | OpenCode SQLite database |
 
 ### Data Sources (read-only Docker mounts)
 
@@ -82,6 +88,8 @@ Open [http://localhost:8765](http://localhost:8765)
 | Claude Code logs | `~/.claude/projects/**/*.jsonl` |
 | Codex session logs | `~/.codex/sessions/**/*.jsonl` |
 | Codex SQLite DB | `~/.codex/logs_2.sqlite` |
+| GitHub Copilot (VS) | `%TEMP%\VSGitHubCopilotLogs\*.chat.log` |
+| OpenCode DB | `~/.local/share/opencode/opencode.db` |
 
 ### Useful Commands
 

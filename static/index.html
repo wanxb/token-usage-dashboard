@@ -12,41 +12,41 @@
     <header class="app-header">
       <div class="masthead">
         <h1>Token Usage Dashboard</h1>
-        <p id="metaLine">Aggregated from local Claude Code &amp; Codex logs</p>
+        <p id="metaLine">Aggregated from local Claude Code, Codex, Copilot &amp; OpenCode logs</p>
+      </div>
+      <div class="header-filters" aria-label="Filters">
+        <label>
+          Tool
+          <select id="toolSelect">
+            <option value="all">All</option>
+            <option value="claude">Claude Code</option>
+            <option value="codex">Codex</option>
+            <option value="copilot">GitHub Copilot</option>
+            <option value="opencode">OpenCode</option>
+          </select>
+        </label>
+        <label>
+          From
+          <span class="date-picker-wrap">
+            <input id="fromDate" type="text" placeholder="YYYY-MM-DD" readonly>
+          </span>
+        </label>
+        <label>
+          To
+          <span class="date-picker-wrap">
+            <input id="toDate" type="text" placeholder="YYYY-MM-DD" readonly>
+          </span>
+        </label>
+        <label>
+          Project
+          <select id="projectSelect">
+            <option value="all">All</option>
+          </select>
+        </label>
       </div>
     </header>
 
     <main>
-      <section class="filters-band" aria-label="Filters">
-        <div class="filters">
-          <label>
-            Tool
-            <select id="toolSelect">
-              <option value="all">All</option>
-              <option value="claude">Claude Code</option>
-              <option value="codex">Codex</option>
-            </select>
-          </label>
-          <label>
-            From
-            <span class="date-picker-wrap">
-              <input id="fromDate" type="text" placeholder="YYYY-MM-DD" readonly>
-            </span>
-          </label>
-          <label>
-            To
-            <span class="date-picker-wrap">
-              <input id="toDate" type="text" placeholder="YYYY-MM-DD" readonly>
-            </span>
-          </label>
-          <label>
-            Project
-            <select id="projectSelect">
-              <option value="all">All</option>
-            </select>
-          </label>
-        </div>
-      </section>
 
       <section class="summary-band" aria-label="Summary">
         <article class="metric">

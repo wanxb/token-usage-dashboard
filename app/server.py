@@ -80,7 +80,7 @@ class Handler(SimpleHTTPRequestHandler):
         tool = first(params, "tool", "all")
         project = first(params, "project", "all")
         force_refresh = first(params, "refresh", "0") == "1"
-        if tool not in {"all", "claude", "codex"}:
+        if tool not in {"all", "claude", "codex", "copilot", "opencode"}:
             raise ValueError("invalid tool")
         return load_summary(
             tool=tool,
@@ -93,6 +93,8 @@ class Handler(SimpleHTTPRequestHandler):
             codex_sessions=env_path("TOKEN_USAGE_CODEX_SESSIONS", str(Path.home() / ".codex" / "sessions")),
             codex_db=env_path("TOKEN_USAGE_CODEX_DB", str(Path.home() / ".codex" / "logs_2.sqlite")),
             codex_source="auto",
+            copilot_logs=env_path("TOKEN_USAGE_COPILOT_LOGS", str(Path.home() / "AppData" / "Local" / "Temp" / "VSGitHubCopilotLogs")),
+            opencode_db=env_path("TOKEN_USAGE_OPENCODE_DB", str(Path.home() / ".local" / "share" / "opencode" / "opencode.db")),
         )
 
     def send_json(self, status: int, payload) -> None:

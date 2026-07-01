@@ -9,7 +9,11 @@
       TOKEN_USAGE_CLAUDE_PROJECTS: /host/claude/projects
       TOKEN_USAGE_CODEX_SESSIONS: /host/codex/sessions
       TOKEN_USAGE_CODEX_DB: /host/codex/logs_2.sqlite
+      TOKEN_USAGE_COPILOT_LOGS: /host/copilot-logs
+      TOKEN_USAGE_OPENCODE_DB: /host/opencode/opencode.db
     volumes:
       - C:\Users\Administrator\.claude:/host/claude:ro
       - C:\Users\Administrator\.codex:/host/codex:ro
+      - C:\Users\Administrator\AppData\Local\Temp\VSGitHubCopilotLogs:/host/copilot-logs:ro
+      - C:\Users\Administrator\.local\share\opencode:/host/opencode:ro
     restart: unless-stopped

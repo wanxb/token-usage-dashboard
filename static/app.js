@@ -127,7 +127,7 @@ function renderTable() {
   const { rows, totalRows, totalPages, startIndex, endIndex } = visibleRows();
   els.body.innerHTML = rows.map((row) => `
     <tr>
-      <td>${row.tool === "claude" ? "Claude Code" : row.tool === "codex" ? "Codex" : row.tool}</td>
+      <td>${row.tool === "claude" ? "Claude Code" : row.tool === "codex" ? "Codex" : row.tool === "copilot" ? "GitHub Copilot" : row.tool === "opencode" ? "OpenCode" : row.tool}</td>
       <td>${row.project || "—"}</td>
       <td>${row.period}</td>
       <td class="num">${fmt(row.requests)}</td>

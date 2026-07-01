@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import sys
 import time as _time
@@ -404,6 +405,293 @@ def iter_codex_sqlite_events(db_path: Path, tz: ZoneInfo) -> Iterable[UsageEvent
         con.close()
 
 
+# ── GitHub Copilot parser ──────────────────────────────────────────
+
+_COPILOT_LOG_RE = re.compile(
+    r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) .*?\] "
+    r"\[CopilotClient EventType\(\d+\)\] (.+)$"
+)
+
+_COPILOT_EVENTTYPE11_RE = re.compile(
+    r"^\[.*?\] \[CopilotClient EventType\(11\)\] (.+)$"
+)
+
+_COPILOT_EVENTTYPE9_RE = re.compile(
+    r'^\[.*?\] \[CopilotClient EventType\(9\)\] (.+)$'
+)
+
+_COPILOT_WORKSPACE_RE = re.compile(
+    r"Active workspace path changed to (.+)$"
+)
+
+
+def _extract_copilot_project(workspace_path: str) -> str:
+    """Derive a short project name from a full workspace path."""
+    # Path: E:\Projects\psp\  →  project: psp
+    path = Path(workspace_path.rstrip("\\").rstrip("/"))
+    return path.name or "unknown"
+
+
+def _parse_copilot_timestamp(log_dt_str: str, tz: ZoneInfo) -> datetime | None:
+    """Parse a Copilot log timestamp like '2026-05-26 01:59:33.550'."""
+    try:
+        dt = datetime.strptime(log_dt_str, "%Y-%m-%d %H:%M:%S.%f")
+        return dt.replace(tzinfo=tz)
+    except ValueError:
+        return None
+
+
+def iter_copilot_events(logs_dir: Path, tz: ZoneInfo) -> Iterable[UsageEvent]:
+    """Parse GitHub Copilot chat log files for token usage events.
+
+    Looks for ``*.chat.log`` files in *logs_dir* that contain
+    ``EventType(11)`` lines with JSON token data.
+
+    Tracks:
+    - workspace path from ``Active workspace path changed to ...`` lines
+    - model name from ``EventType(9)`` request JSON
+    """
+    if not logs_dir.exists():
+        return
+
+    logs = sorted(logs_dir.glob("*.chat.log"))
+    if not logs:
+        # Fallback: check subdirectories
+        logs = sorted(logs_dir.rglob("*.chat.log"))
+
+    for path in logs:
+        current_project = ""
+        last_model = ""
+        try:
+            lines = path.open("r", encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+
+        with lines:
+            for line in lines:
+                line = line.rstrip("\n\r")
+                if not line:
+                    continue
+
+                # ── Track workspace / project ────────────────────────
+                m = _COPILOT_WORKSPACE_RE.search(line)
+                if m:
+                    current_project = _extract_copilot_project(m.group(1))
+                    continue
+
+                # ── Track model from EventType(9) JSON ───────────────
+                m = _COPILOT_EVENTTYPE9_RE.match(line)
+                if m:
+                    try:
+                        req = json.loads(m.group(1))
+                        model = req.get("model", "")
+                        if isinstance(model, str) and model:
+                            last_model = model
+                    except json.JSONDecodeError:
+                        pass
+                    continue
+
+                # ── Token usage from EventType(11) JSON ──────────────
+                m = _COPILOT_EVENTTYPE11_RE.match(line)
+                if not m:
+                    continue
+
+                token_data_str = m.group(1)
+                try:
+                    token_arr = json.loads(token_data_str)
+                except json.JSONDecodeError:
+                    continue
+
+                if not isinstance(token_arr, list) or not token_arr:
+                    continue
+                token_data = token_arr[0]
+                if not isinstance(token_data, dict):
+                    continue
+
+                # Timestamp from the log-line prefix
+                log_m = _COPILOT_LOG_RE.match(line)
+                if not log_m:
+                    continue
+                timestamp = _parse_copilot_timestamp(log_m.group(1), tz)
+                if timestamp is None:
+                    continue
+
+                input_tokens = as_int(token_data.get("InputTokenCount"))
+                output_tokens = as_int(token_data.get("OutputTokenCount"))
+                total_tokens = as_int(token_data.get("TotalTokenCount"))
+                cached_tokens = as_int(token_data.get("CachedInputTokenCount"))
+
+                # Reasoning: check top-level then AdditionalCounts
+                reasoning_tokens = as_int(token_data.get("ReasoningTokenCount"))
+                if not reasoning_tokens:
+                    additional = token_data.get("AdditionalCounts")
+                    if isinstance(additional, dict):
+                        reasoning_tokens = as_int(additional.get("reasoning_tokens"))
+
+                yield UsageEvent(
+                    tool="copilot",
+                    timestamp=timestamp,
+                    model=last_model,
+                    project=current_project,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cached_tokens=cached_tokens,
+                    reasoning_tokens=reasoning_tokens,
+                    total_tokens=total_tokens or (input_tokens + output_tokens),
+                )
+
+
+# ── OpenCode parser ───────────────────────────────────────────────
+
+
+def _ms_to_dt(ts_ms: int, tz: ZoneInfo) -> datetime:
+    """Convert millisecond epoch to timezone-aware datetime."""
+    return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).astimezone(tz)
+
+
+def _parse_opencode_tokens(
+    tokens_data: object,
+) -> tuple[int, int, int, int]:
+    """Extract (input, output, cached, reasoning) from OpenCode token data.
+
+    Handles both ``message.data.tokens`` (flat dict):
+        {"total": N, "input": N, "output": N, "reasoning": N,
+         "cache": {"read": N, "write": N}}
+
+    And ``part.data.tokens`` (same structure).
+    """
+    if not isinstance(tokens_data, dict):
+        return 0, 0, 0, 0
+    input_t = as_int(tokens_data.get("input"))
+    output_t = as_int(tokens_data.get("output"))
+    reasoning_t = as_int(tokens_data.get("reasoning"))
+
+    cache_data = tokens_data.get("cache")
+    if isinstance(cache_data, dict):
+        cached_t = as_int(cache_data.get("read"))
+    else:
+        cached_t = 0
+
+    return input_t, output_t, cached_t, reasoning_t
+
+
+def _resolve_opencode_project(
+    session_id: str, session_cache: dict[str, dict]
+) -> str:
+    """Resolve a session ID to a human-readable project name."""
+    session = session_cache.get(session_id)
+    if session is None:
+        return session_id[:20]  # fallback: truncated session ID
+    return session.get("directory", "") or session.get("title", "") or session_id[:20]
+
+
+def _build_session_cache(con: sqlite3.Connection) -> dict[str, dict]:
+    """Pre-load session table into a dict keyed by session ID."""
+    cache: dict[str, dict] = {}
+    try:
+        cols = [d[0] for d in con.execute("SELECT * FROM session LIMIT 0").description]
+        for row in con.execute("SELECT * FROM session"):
+            rec = dict(zip(cols, row))
+            sid = rec.get("id")
+            if sid:
+                cache[sid] = rec
+    except sqlite3.Error:
+        pass
+    return cache
+
+
+def iter_opencode_events(db_path: Path, tz: ZoneInfo) -> Iterable[UsageEvent]:
+    """Parse OpenCode SQLite database for per-step and per-message token usage.
+
+    Reads two data sources in order:
+    1. ``part`` table — rows with ``type = 'step-finish'`` holding per-step token data
+    2. ``message`` table — assistant message rows with top-level ``tokens`` field
+    """
+    if not db_path.exists():
+        return
+
+    try:
+        con = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return
+
+    try:
+        session_cache = _build_session_cache(con)
+
+        # ── Source 1: part table, type = 'step-finish' ────────────
+        try:
+            cols = [d[0] for d in con.execute("SELECT * FROM part LIMIT 0").description]
+            for row in con.execute(
+                "SELECT * FROM part WHERE data LIKE '%step-finish%'"
+            ):
+                rec = dict(zip(cols, row))
+                raw = rec.get("data")
+                if not isinstance(raw, str):
+                    continue
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(parsed, dict) or parsed.get("type") != "step-finish":
+                    continue
+
+                tokens_data = parsed.get("tokens")
+                if not isinstance(tokens_data, dict):
+                    continue
+
+                input_t, output_t, cached_t, reasoning_t = _parse_opencode_tokens(tokens_data)
+                total_t = as_int(tokens_data.get("total"))
+                if not total_t and not input_t and not output_t:
+                    continue
+
+                # Timestamp from part.time_created (milliseconds epoch)
+                ts_ms = rec.get("time_created")
+                if not isinstance(ts_ms, (int, float)):
+                    continue
+                timestamp = _ms_to_dt(int(ts_ms), tz)
+
+                # Model and project from session/message context
+                session_id = rec.get("session_id") or ""
+                project = _resolve_opencode_project(session_id, session_cache)
+
+                # Try to find model from message.data (upstream)
+                model = ""
+                msg_id = rec.get("message_id")
+                if msg_id:
+                    try:
+                        cur = con.execute(
+                            "SELECT data FROM message WHERE id = ?", (msg_id,)
+                        )
+                        msg_row = cur.fetchone()
+                        if msg_row:
+                            msg_data = json.loads(msg_row[0])
+                            if isinstance(msg_data, dict):
+                                model = str(
+                                    msg_data.get("modelID")
+                                    or msg_data.get("model", "")
+                                    or ""
+                                )
+                    except (sqlite3.Error, json.JSONDecodeError):
+                        pass
+
+                yield UsageEvent(
+                    tool="opencode",
+                    timestamp=timestamp,
+                    model=model,
+                    project=project,
+                    input_tokens=input_t,
+                    output_tokens=output_t,
+                    cached_tokens=cached_t,
+                    reasoning_tokens=reasoning_t,
+                    total_tokens=total_t or (input_t + output_t),
+                )
+        except sqlite3.Error:
+            pass
+
+    finally:
+        con.close()
+
+
 def period_key(timestamp: datetime, period: str) -> str:
     local_date = timestamp.date()
     if period == "daily":
@@ -477,6 +765,8 @@ def load_summary(
     codex_sessions: Path,
     codex_db: Path,
     codex_source: str,
+    copilot_logs: Path = Path(""),
+    opencode_db: Path = Path(""),
     project: str = "all",
     force_refresh: bool = False,
 ) -> dict[str, object]:
@@ -511,6 +801,22 @@ def load_summary(
                 cached(codex_sqlite_key, lambda: list(iter_codex_sqlite_events(codex_db, tz)), force=force_refresh)
             )
         events.extend(codex_events)
+
+    if tool in {"all", "copilot"}:
+        copilot_key = f"copilot:{copilot_logs}:{tz_name}"
+        copilot_events = cached(copilot_key, lambda: list(iter_copilot_events(copilot_logs, tz)), force=force_refresh)
+        if project == "all":
+            events.extend(copilot_events)
+        else:
+            events.extend(e for e in copilot_events if e.project == project)
+
+    if tool in {"all", "opencode"}:
+        opencode_key = f"opencode:{opencode_db}:{tz_name}"
+        opencode_events = cached(opencode_key, lambda: list(iter_opencode_events(opencode_db, tz)), force=force_refresh)
+        if project == "all":
+            events.extend(opencode_events)
+        else:
+            events.extend(e for e in opencode_events if e.project == project)
 
     filtered = [event for event in events if in_range(event.timestamp, start, end)]
     rows = summarize(filtered)
@@ -549,6 +855,8 @@ def load_summary(
                 "claude_projects": str(claude_projects),
                 "codex_sessions": str(codex_sessions),
                 "codex_db": str(codex_db),
+                "copilot_logs": str(copilot_logs),
+                "opencode_db": str(opencode_db),
             },
             "projects": all_projects,
         },
