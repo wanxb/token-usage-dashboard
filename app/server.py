@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import os
+import platform
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -16,6 +17,28 @@ STATIC_DIR = ROOT / "static"
 
 def env_path(name: str, default: str) -> Path:
     return Path(os.environ.get(name, default))
+
+
+def _default_copilot_logs() -> str:
+    """Return the platform-appropriate default Copilot log directory."""
+    system = platform.system()
+    if system == "Windows":
+        return str(Path.home() / "AppData" / "Local" / "Temp" / "VSGitHubCopilotLogs")
+    elif system == "Darwin":
+        return str(Path.home() / "Library" / "Application Support" / "Code" / "logs")
+    else:  # Linux and others
+        return str(Path.home() / ".config" / "Code" / "logs")
+
+
+def _default_opencode_db() -> str:
+    """Return the platform-appropriate default OpenCode database path."""
+    system = platform.system()
+    if system == "Windows":
+        return str(Path.home() / "AppData" / "Roaming" / "opencode" / "opencode.db")
+    elif system == "Darwin":
+        return str(Path.home() / "Library" / "Application Support" / "opencode" / "opencode.db")
+    else:  # Linux and others
+        return str(Path.home() / ".local" / "share" / "opencode" / "opencode.db")
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -93,8 +116,8 @@ class Handler(SimpleHTTPRequestHandler):
             codex_sessions=env_path("TOKEN_USAGE_CODEX_SESSIONS", str(Path.home() / ".codex" / "sessions")),
             codex_db=env_path("TOKEN_USAGE_CODEX_DB", str(Path.home() / ".codex" / "logs_2.sqlite")),
             codex_source="auto",
-            copilot_logs=env_path("TOKEN_USAGE_COPILOT_LOGS", str(Path.home() / "AppData" / "Local" / "Temp" / "VSGitHubCopilotLogs")),
-            opencode_db=env_path("TOKEN_USAGE_OPENCODE_DB", str(Path.home() / ".local" / "share" / "opencode" / "opencode.db")),
+            copilot_logs=env_path("TOKEN_USAGE_COPILOT_LOGS", _default_copilot_logs()),
+            opencode_db=env_path("TOKEN_USAGE_OPENCODE_DB", _default_opencode_db()),
         )
 
     def send_json(self, status: int, payload) -> None:

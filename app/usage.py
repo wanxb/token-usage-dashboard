@@ -7,7 +7,7 @@ import sys
 import time as _time
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Callable, Iterable, TypeVar
 from zoneinfo import ZoneInfo
 
@@ -146,20 +146,19 @@ def _build_project_cache(projects_dir: Path) -> None:
                         continue
                     cwd = obj.get("cwd")
                     if isinstance(cwd, str):
-                        cwds = set(cwd)  # store full cwd path
                         all_cwds.add(cwd)
                     if len(all_cwds) >= 16:
                         break
 
         if all_cwds:
-            root = min(all_cwds, key=lambda p: p.count("\\"))
+            root = PurePath(min(all_cwds, key=lambda p: len(PurePath(p).parts)))
         else:
             root = None
 
         folder_roots[folder] = root
 
     # ---- step 2: set of known root cwds ---------------------------------
-    all_roots: set[str] = {r for r in folder_roots.values() if r is not None}
+    all_roots: set[PurePath] = {r for r in folder_roots.values() if r is not None}
 
     # ---- step 3: canonical project for each folder -----------------------
     for folder, root in folder_roots.items():
@@ -168,14 +167,12 @@ def _build_project_cache(projects_dir: Path) -> None:
             continue
 
         # Walk up: is the parent directory a known project root?
-        parent = root.rstrip("\\").rsplit("\\", 1)[0]
+        parent = root.parent
         if parent in all_roots:
             # This folder is a sub-project; use parent's display name
-            parent_name = parent.rstrip("\\").rsplit("\\", 1)[-1]
-            _folder_display_cache[folder] = parent_name
+            _folder_display_cache[folder] = parent.name
         else:
-            parts = root.rstrip("\\").rsplit("\\", 1)
-            _folder_display_cache[folder] = parts[-1] if parts else _decode_folder_name(folder)
+            _folder_display_cache[folder] = root.name or _decode_folder_name(folder)
 
 
 def resolve_claude_project(path: Path, projects_dir: Path) -> str:

@@ -12,8 +12,8 @@
       TOKEN_USAGE_COPILOT_LOGS: /host/copilot-logs
       TOKEN_USAGE_OPENCODE_DB: /host/opencode/opencode.db
     volumes:
-      - C:\Users\Administrator\.claude:/host/claude:ro
-      - C:\Users\Administrator\.codex:/host/codex:ro
-      - C:\Users\Administrator\AppData\Local\Temp\VSGitHubCopilotLogs:/host/copilot-logs:ro
-      - C:\Users\Administrator\.local\share\opencode:/host/opencode:ro
+      - ${CLAUDE_MOUNT:-./data/claude}:/host/claude:ro
+      - ${CODEX_MOUNT:-./data/codex}:/host/codex:ro
+      - ${COPILOT_MOUNT:-./data/copilot-logs}:/host/copilot-logs:ro
+      - ${OPENCODE_MOUNT:-./data/opencode}:/host/opencode:ro
     restart: unless-stopped
