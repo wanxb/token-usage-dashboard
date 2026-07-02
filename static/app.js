@@ -236,8 +236,14 @@ function renderHeatmap() {
   const cellSize = Math.max(10, Math.floor((available - 52 * gap) / 53));
   const step = cellSize + gap;
 
-  // Set dynamic CSS variable on common ancestor so y-labels + cells both inherit
+  // Cell height slightly smaller than width, with padding to maintain total height
+  const cellHeight = Math.max(6, cellSize - 2);
+  const colPad = Math.floor((cellSize - cellHeight) * 7 / 2);
+
+  // Set dynamic CSS variables on common ancestor so y-labels + cells both inherit
   contentEl.style.setProperty("--heatmap-cell-size", cellSize + "px");
+  contentEl.style.setProperty("--heatmap-cell-height", cellHeight + "px");
+  contentEl.style.setProperty("--heatmap-col-padding", colPad + "px");
   contentEl.style.setProperty("--heatmap-cell-gap", gap + "px");
 
   // Render month labels

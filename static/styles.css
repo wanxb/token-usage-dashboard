@@ -226,12 +226,14 @@ main {
 
 .metric strong {
   display: block;
-  font-size: 30px;
+  font-size: clamp(14px, 2.2vw, 30px);
   line-height: 1.1;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--near-black);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Panels ─────────────────────────────────────────── */
@@ -558,15 +560,15 @@ tbody tr:hover {
   display: flex;
   margin-left: 20px;
   margin-bottom: 0;
-  height: 10px;
+  height: 14px;
   position: relative;
 }
 
 .heatmap-month-label {
   position: absolute;
-  font-size: 7px;
+  font-size: 10px;
   color: var(--stone);
-  line-height: 10px;
+  line-height: 14px;
   white-space: nowrap;
   pointer-events: none;
 }
@@ -584,9 +586,9 @@ tbody tr:hover {
 }
 
 .heatmap-y-labels span {
-  height: var(--heatmap-cell-size);
-  line-height: var(--heatmap-cell-size);
-  font-size: 8px;
+  height: var(--heatmap-cell-height, var(--heatmap-cell-size));
+  line-height: var(--heatmap-cell-height, var(--heatmap-cell-size));
+  font-size: 10px;
   color: var(--stone);
   text-align: right;
   white-space: nowrap;
@@ -601,11 +603,12 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   gap: var(--heatmap-cell-gap);
+  padding: var(--heatmap-col-padding, 0) 0;
 }
 
 .heatmap-cell {
   width: var(--heatmap-cell-size);
-  height: var(--heatmap-cell-size);
+  height: var(--heatmap-cell-height, var(--heatmap-cell-size));
   border-radius: 2px;
   cursor: pointer;
   transition: outline 100ms ease, opacity 100ms ease;
